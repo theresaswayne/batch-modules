@@ -7,7 +7,7 @@
 require(tidyverse)
 
 # text to filter for in the end of the file name
-finalText <- "C2_Results.csv"
+finalText <- "meas_results.csv"
 
 # ---- Prompt for a data folder ----
 # no message will be displayed. Choose one of the files in the folder
