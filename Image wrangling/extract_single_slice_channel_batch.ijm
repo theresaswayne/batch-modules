@@ -1,62 +1,55 @@
 //@File(label = "Input directory", style = "directory") inputDir
 //@File(label = "Output directory", style = "directory") outputDir
 //@String (label = "File suffix", value = ".ome.tiff") fileSuffix
-//@ int(label="Channel to extract", style = "spinner", value=3) Channel_1
-//@ int(label="Slice to extract", style = "spinner", value = 11) Slice_1
+//@int(label="Channel to extract", style = "spinner", value = 3) Channel_1
+//@int(label="Slice to extract", style = "spinner", value = 11) Slice_1
 
-// ImageJ/Fiji script to extract a single channel and slice 
-//    from a batch of multichannel stacks
-// 	Useful for pulling transmitted light image for Cellpose segmentation
-// Theresa Swayne, 2026 with thanks to Emily Jie-Ning Yang for extension handling
+// ImageJ/Fiji script to extract a single plane (channel and slice) from a multichannel stack, across a folder of images
+// Modified from the ImageJ batch macro template by Theresa Swayne, 2026 
+// With thanks to Emily Jie-Ning Yang for extension handling
 // 
 //  -------- Suggested text for acknowledgement -----------
-//   "These studies used the Confocal and Specialized Microscopy Shared Resource 
-//   of the Herbert Irving Comprehensive Cancer Center at Columbia University, 
-//   funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
-
-// 	
+//   "These studies used the Confocal and Specialized Microscopy Shared Resource of the Herbert Irving Comprehensive Cancer Center at Columbia University, funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
 
 // ---- Setup ----
 
-while (nImages>0) { // clean up open images
+while (nImages>0) { // close all open images
 	selectImage(nImages);
 	close();
 }
 print("\\Clear"); // clear Log window
+startTime = getTime(); // keep track of time
+setBatchMode(true); // faster performance 
 
-// keep track of time
-startTime = getTime();
-
-setBatchMode(true); // 2x faster performance
 run("Bio-Formats Macro Extensions"); // support native microscope files
-
 
 // ---- Run ----
 
-print("Starting");
-
-// Call the processFolder function, including the parameters collected at the beginning of the script
-
+// call the processFolder function, including parameters collected at the beginning of the script
+// returns the number of files processed 
 n = processFolder(inputDir, outputDir, fileSuffix, Channel_1, Slice_1);
 
-// Clean up images and get out of batch mode
-
-while (nImages > 0) { // clean up open images
+// clean up
+while (nImages > 0) { // close all open images
 	selectImage(nImages);
 	close(); 
 }
 setBatchMode(false);
 
+// report processing time
 time = getTime();
 elapsedTime = (time - startTime)/1000;
 print("Finished",n,"images in ", elapsedTime , " sec");
 
+// save log
+selectWindow("Log");
+saveAs("text", outputDir + File.separator + "Slice_Extract_Log.txt");
 
 // ---- Functions ----
 
 function processFolder(input, output, suffix, chan, slice) {
-
 	// this function searches for files matching the criteria and sends them to the processFile function
+
 	filenum = 0;
 	print("Processing folder", input);
 
@@ -78,7 +71,6 @@ function processFolder(input, output, suffix, chan, slice) {
 
 
 function processFile(inputFolder, outputFolder, fileName, fileNumber, channel, slice) {
-	
 	// this function processes a single image
 	
 	path = inputFolder + File.separator + fileName;
@@ -98,7 +90,6 @@ function processFile(inputFolder, outputFolder, fileName, fileNumber, channel, s
 
 	print("File basename is",basename, "and extension is",extension );
 
-	
 	// open the file
 	
 	// --- option 1 -- open entire file and make a substack

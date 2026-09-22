@@ -18,7 +18,6 @@
 //		See ImageJ wiki for more script parameter options.
 //		Remember to pass your parameters into the processFolder and processFile functions!
 //  Run the script in Fiji. 
-//	Limitation -- cannot have >1 dots in the filename
 // 	
 
 // ---- Setup ----
@@ -34,7 +33,6 @@ startTime = getTime();
 
 setBatchMode(true); // faster performance
 run("Bio-Formats Macro Extensions"); // support native microscope files
-
 
 // ---- Run ----
 
@@ -56,6 +54,9 @@ time = getTime();
 elapsedTime = (time - startTime)/1000;
 print("Finished in ", elapsedTime , " sec");
 
+// save log
+selectWindow("Log");
+saveAs("text", outputDir + File.separator + "Batch_Log.txt");
 
 // ---- Functions ----
 
