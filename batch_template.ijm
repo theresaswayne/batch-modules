@@ -5,8 +5,8 @@
 
 // batch_template.ijm
 // ImageJ/Fiji script to process a batch of images
-// Theresa Swayne, 2025
-//  -------- Suggested text for acknowledgement -----------
+// Modified from the ImageJ batch macro template by Theresa Swayne, 2025
+//  -------- Suggested text for acknowledgement by core facility users -----------
 //   "These studies used the Confocal and Specialized Microscopy Shared Resource 
 //   of the Herbert Irving Comprehensive Cancer Center at Columbia University, 
 //   funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
@@ -18,41 +18,39 @@
 //		See ImageJ wiki for more script parameter options.
 //		Remember to pass your parameters into the processFolder and processFile functions!
 //  Run the script in Fiji. 
-// 	
+
 
 // ---- Setup ----
 
-while (nImages>0) { // clean up open images
+while (nImages>0) { // close all open images
 	selectImage(nImages);
 	close();
 }
+run("Collect Garbage"); // helps to clear memory
 print("\\Clear"); // clear Log window
-
-// keep track of time
-startTime = getTime();
-
-setBatchMode(true); // faster performance
+startTime = getTime(); // keep track of time
+setBatchMode(true); // faster performance 
 run("Bio-Formats Macro Extensions"); // support native microscope files
 
 // ---- Run ----
 
 print("Starting");
 
-// Call the processFolder function, including the parameters collected at the beginning of the script
+// call the processFolder function, including the parameters collected at the beginning of the script
+// returns the number of files processed 
+n = processFolder(inputDir, outputDir, fileSuffix, numericalParameter);
 
-processFolder(inputDir, outputDir, fileSuffix, numericalParameter);
-
-// Clean up images and get out of batch mode
-
-while (nImages > 0) { // clean up open images
+// clean up
+while (nImages > 0) { // close all open images
 	selectImage(nImages);
 	close(); 
 }
 setBatchMode(false);
 
+// report processing time
 time = getTime();
 elapsedTime = (time - startTime)/1000;
-print("Finished in ", elapsedTime , " sec");
+print("Finished",n,"images in ", elapsedTime , " sec");
 
 // save log
 selectWindow("Log");
@@ -61,9 +59,9 @@ saveAs("text", outputDir + File.separator + "Batch_Log.txt");
 // ---- Functions ----
 
 function processFolder(input, output, suffix, param) {
-
 	// this function searches for files matching the criteria and sends them to the processFile function
-	filenum = -1;
+
+	filenum = 0;
 	print("Processing folder", input);
 	// scan folder tree to find files with correct suffix
 	list = getFileList(input);
@@ -77,22 +75,27 @@ function processFolder(input, output, suffix, param) {
 			processFile(input, output, list[i], filenum, param); // passes the filename and parameters to the processFile function
 		}
 	}
+	return filenum;
 } // end of processFolder function
 
-
 function processFile(inputFolder, outputFolder, fileName, fileNumber, parameter) {
-	
 	// this function processes a single image
 	
 	path = inputFolder + File.separator + fileName;
-	print("Processing file",fileNumber," at path" ,path);	
 
-	// determine the name of the file without extension
-	dotIndex = lastIndexOf(fileName, ".");
-	basename = substring(fileName, 0, dotIndex); 
-	extension = substring(fileName, dotIndex);
-	
-	print("File basename is",basename);
+	// determine the name of the file without extension -- support ome tiff
+    if(endsWith(fileName, ".ome.tiff")){
+	    basename_temp = File.getNameWithoutExtension(fileName);
+	    basename = File.getNameWithoutExtension(basename_temp);
+	    extension = ".ome.tiff";
+    }
+    else{
+		dotIndex = lastIndexOf(fileName, ".");
+	    basename = File.getNameWithoutExtension(basename);
+		extension = substring(fileName, dotIndex);
+    }
+
+	print("Processing image",fileNumber," at path" ,path, "with basename",basename, "and extension",extension );	
 	
 	// open the file
 	run("Bio-Formats", "open=&path");
@@ -105,10 +108,11 @@ function processFile(inputFolder, outputFolder, fileName, fileNumber, parameter)
 	close();
 	
 	// clean up
-	while (nImages > 0) { // clean up open images
+	while (nImages > 0) { // close all open images
 		selectImage(nImages);
 		close(); 
-	}
+		}
+	run("Collect Garbage"); // helps to clear memory
 } // end of processFile function
 
 

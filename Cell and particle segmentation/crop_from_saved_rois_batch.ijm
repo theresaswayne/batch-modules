@@ -3,61 +3,73 @@
 //@File(label = "Output directory", style = "directory") outputDir
 //@String (label = "Image file suffix", value = ".nd2") fileSuffix
 
-// cropToSavedRois_batch.ijm
+// crop_from_saved_rois_batch.ijm
 // ImageJ/Fiji script to process a batch of images and corresponding ROIsets to generate one image for each ROI, with the area outside cleared
-
-// Required input: ROIset must be a Zip file with the same base name
-// Image: MyImage.tif (or .nd2, etc)
-// Roiset: MyImage.zip
-
 // Theresa Swayne, 2025
-//  -------- Suggested text for acknowledgement -----------
+
+//  -------- Suggested text for acknowledgement by core facility users -----------
 //   "These studies used the Confocal and Specialized Microscopy Shared Resource 
 //   of the Herbert Irving Comprehensive Cancer Center at Columbia University, 
 //   funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
 
+// Input: ROIset must be a Zip file with the same base name as the image
+// 	Image: MyImage.tif (or .nd2, etc)
+// 	ROIset: MyImage.zip
+// Output: A cropped image or stack matching the dimensionality of input,
+//		corresponding to the bounding box of each ROI
+//		with the area outside the label cleared to black (0); 
+//		a snapshot of the ROI locations;
+//		and a log.
+//	Limitations -- cannot have >1 dots in the filename unless it is ome.tiff. 
+
 // TO USE: Place all input images in the input image folder. 
 //			ROI sets can be in the same or a different folder (but not nested in the image folder!). 
 // 	Create a folder for the output files. 
-//  Run the script in Fiji. 
-//	Limitations -- cannot have >1 dots in the filename. 
-// 		Each image must have an ROIset.
+//  Run the script in the Fiji Script Editor. 
 
 // ---- Setup ----
 
-while (nImages>0) { // clean up open images
+while (nImages>0) { // close all open images
 	selectImage(nImages);
 	close();
 }
+run("Collect Garbage"); // helps to clear memory
 print("\\Clear"); // clear Log window
-
+startTime = getTime(); // keep track of time
+setBatchMode(true); // faster performance 
+run("Bio-Formats Macro Extensions"); // support native microscope files
 roiManager("reset");
-
-// setBatchMode(true); // faster performance but doesn't work for all functions
-run("Bio-Formats Macro Extensions"); // supports native microscope files
 
 // ---- Run ----
 
 print("Starting");
 
-processFolder(inputDir, roiDir, outputDir, fileSuffix);
+// Call the processFolder function, including the parameters collected at the beginning of the script
+// returns the number of files processed 
+n = processFolder(inputDir, roiDir, outputDir, fileSuffix);
 
-// Clean up images and get out of batch mode
-
-while (nImages > 0) { // clean up open images
+// clean up
+while (nImages > 0) { // close all open images
 	selectImage(nImages);
 	close(); 
 }
 setBatchMode(false);
-print("Finished");
 
+// report processing time
+time = getTime();
+elapsedTime = (time - startTime)/1000;
+print("Finished",n,"images in ", elapsedTime , " sec");
+
+// save log
+selectWindow("Log");
+saveAs("text", outputRoiDir + File.separator + "Crop_Log.txt");
 
 // ---- Functions ----
 
 function processFolder(input, roiInput, output, suffix) {
-
 	// this function searches for files matching the criteria and sends them to the processFile function
-	filenum = -1;
+
+	filenum = 0;
 	print("Processing folder", input);
 	// scan folder tree to find files with correct suffix
 	list = getFileList(input);
@@ -71,27 +83,34 @@ function processFolder(input, roiInput, output, suffix) {
 			processFile(input, roiInput, output, list[i], filenum); // passes the filename and parameters to the processFile function
 		}
 	}
+	return filenum;
 } // end of processFolder function
 
-
 function processFile(inputFolder, roiFolder, outputFolder, fileName, fileNumber) {
-	
 	// this function processes a single image
 	
 	// ---------- SETUP
 	
+	roiManager("reset");
 	imagePath = inputFolder + File.separator + fileName;
+
+	// determine the name of the file without extension -- support ome tiff
+    if(endsWith(fileName, ".ome.tiff")){
+	    basename_temp = File.getNameWithoutExtension(fileName);
+	    basename = File.getNameWithoutExtension(basename_temp);
+	    extension = ".ome.tiff";
+    }
+    else{
+		dotIndex = lastIndexOf(fileName, ".");
+	    basename = File.getNameWithoutExtension(basename);
+		extension = substring(fileName, dotIndex);
+    }
 	
+	print("Processing image",fileNumber," at path" ,imagePath, "with basename",basename, "and extension",extension );	
+
 	// open the image file
 	run("Bio-Formats", "open=&imagePath");
-	
-	// determine the name of the file without extension
-	id = getImageID();
-	dotIndex = lastIndexOf(fileName, ".");
-	basename = substring(fileName, 0, dotIndex); 
-	extension = substring(fileName, dotIndex);
-
-	print("Processing image",fileNumber," at path" ,imagePath, "with basename",basename);	
+	rename("image"); // easier handling of files
 	
 	// open the corresponding ROIset
 	//filenameParsed = split(basename, "-");
@@ -99,32 +118,66 @@ function processFile(inputFolder, roiFolder, outputFolder, fileName, fileNumber)
 	roiPath = roiFolder + File.separator +roiFile;
 	
 	roiManager("reset");
-	print("Opening ROI", roiPath);
-	roiManager("Open", roiPath);
+	print("Opening ROIset at", roiPath);
+	
+	if (File.exists(roiPath)) {
+		roiManager("Open", roiPath);
+	}
+	else {
+		print("No matching ROIset at " , roiPath);
+		return; // skip to next image in the list
+	}
 	
 	numROIs = roiManager("count");	
 	// how much to pad?
 	digits = Math.ceil((log(numROIs + 1)/log(10)));
 	
-	
 	// ---------- DOCUMENT ROI LOCATIONS
 	
 	// save a snapshot
-	Stack.getPosition(channel, slice, frame); // how does the user currently have the stack set up
+	getDimensions(width, height, channels, slices, frames);
+
+	// view as composite using the 1st timepoint, middle slice
+	if (frames > 1) {
+		Stack.setFrame(1);
+	}
+	if (slices > 1) {
+		midslice = Math.ceil(slices/2);
+		Stack.setSlice(midslice);
+	}
+	if (channels > 1) {
+		// auto contrast all channels
+		Stack.setDisplayMode("color");
+		for (i = 1; i <= channels; i ++) {
+			Stack.setChannel(i);
+			resetMinAndMax;
+		}
+		if (is("composite")) {
+			Stack.setDisplayMode("composite");
+		}
+	}
+	else { 
+		// auto contrast a single channel 
+		resetMinAndMax;
+	}
+	
+	// create an RGB snapshot
+	selectWindow("image");
+	run("Select None");
+
 	if (is("composite")) {
-		Stack.setDisplayMode("composite"); // this command raises error if image is not composite
-		run("Stack to RGB", "keep");
+		Stack.setDisplayMode("composite"); 
+		run("Stack to RGB", "keep"); // create an RGB image while keeping the original
 	}
 	else {
-		run("Select None");
-	//	run("Duplicate...", "title=copy duplicate"); // for single-channel non-RGB images; Flatten doesn't create new window
 		run("Duplicate...", "title=copy"); // for single-channel non-RGB images; Flatten doesn't create new window
 	}
-	rgbID = getImageID();
+	rgbID = getImageID(); // current image, should be the RGB or the duplicate
 	selectImage(rgbID);
-	
+
+	// display ROIs on the image
+	//run("Labels...", "color=white font=16 show draw bold"); // optional increase label size above the default
 	roiManager("Show All with labels");
-	Stack.setPosition(channel, slice, frame); // restore the previous setup
 	run("Flatten");
 	flatID = getImageID();
 	selectImage(flatID);
@@ -132,7 +185,7 @@ function processFile(inputFolder, roiFolder, outputFolder, fileName, fileNumber)
 	
 	print("Saved snapshot for image",basename);
 	
-	// close images
+	// close images from snapshot generation
 	if (isOpen(flatID)) {
 		selectImage(flatID);
 		close();
@@ -146,7 +199,7 @@ function processFile(inputFolder, roiFolder, outputFolder, fileName, fileNumber)
 	
 	// make sure nothing is selected to begin with
 	selectImage(id);
-	roiManager("Deselect");
+	roiManager("deselect");
 	run("Select None");
 	
 	for(roiIndex=0; roiIndex < numROIs; roiIndex++) // loop through ROIs
@@ -172,12 +225,16 @@ function processFile(inputFolder, roiFolder, outputFolder, fileName, fileNumber)
 	// ---------- CLEANUP
 	
 	run("Select None");
-	print("Saved",numROIs,"cropped ROIs.");
+	print("Processed",numROIs," ROIs.");
 	selectImage(id);
 	close();
 	roiManager("Reset");
-
-
+	
+	while (nImages > 0) { // close all open images
+		selectImage(nImages);
+		close(); 
+	}
+	run("Collect Garbage");
 } // end of processFile function
 
 

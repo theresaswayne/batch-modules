@@ -20,7 +20,6 @@ while (nImages>0) { // close all open images
 print("\\Clear"); // clear Log window
 startTime = getTime(); // keep track of time
 setBatchMode(true); // faster performance 
-
 run("Bio-Formats Macro Extensions"); // support native microscope files
 
 // ---- Run ----
@@ -52,7 +51,6 @@ function processFolder(input, output, suffix, chan, slice) {
 
 	filenum = 0;
 	print("Processing folder", input);
-
 	// scan folder tree to find files with correct suffix
 	list = getFileList(input);
 	list = Array.sort(list);
@@ -100,7 +98,7 @@ function processFile(inputFolder, outputFolder, fileName, fileNumber, channel, s
 	//substackName = "orig-1";
 	//selectWindow(substackName);
 
-	// --- option 2 --- open a subset directly
+	// --- option 2 --- open a subset directly (lower memory usage)
 	run("Bio-Formats", "open=&path color_mode=Default series_1 specify_range c_begin=&channel c_end=&channel c_step=1 z_begin=&slice z_end=&slice z_step=1");
 			
 	// save the output
@@ -109,7 +107,7 @@ function processFile(inputFolder, outputFolder, fileName, fileNumber, channel, s
 	close();
 	
 	// clean up
-	while (nImages > 0) { // clean up open images
+	while (nImages > 0) { // close all open images
 		selectImage(nImages);
 		close(); 
 	}
