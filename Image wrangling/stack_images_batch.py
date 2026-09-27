@@ -5,9 +5,14 @@
 
 # stack_cytation_images.py
 # Theresa Swayne, 2024
-# Generates stacks from images in a folder
-# Useful for Cytation experiments where images from individual positions and channels 
+# ImageJ/Fiji jython script to generate stacks from images in a folder
+# Useful for experiments where images from individual positions and channels 
 #   are all stored in the same folder 
+
+#  -------- Suggested text for acknowledgement by core facility users -----------
+#   "These studies used the Confocal and Specialized Microscopy Shared Resource 
+#   of the Herbert Irving Comprehensive Cancer Center at Columbia University, 
+#   funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
 
 # TO USE: Run the macro and specify folders for input and output, and select the # timepoints.
 # The macro loads files in groups of n where n is the number of timepoints 
@@ -23,6 +28,11 @@ from net.imglib2.view import Views
 from ij import IJ, ImagePlus, ImageStack
 from ij.process import ImageProcessor, FloatProcessor, StackProcessor
 import string
+from java.lang import System
+
+# Record start time
+start_time = System.nanoTime()
+print "Started at",start_time
 
 # Find image files
 inputdir = str(inDir) # convert the directory object into a string
@@ -59,8 +69,6 @@ for stackIndex in range(0,numStacks):
 	#ip = imp.getProcessor()
 	stack = imp.getStack() # supports multichannel composite images
 	
-	
-	
 	new_stack = ImageStack(imp.width, imp.height) # new stack with size based on the image
 	for i in range(1, imp.getNSlices()+1):
 		# Get the slice i
@@ -85,11 +93,17 @@ for stackIndex in range(0,numStacks):
 	basename = currentFile[0:-8] # assumes 3-digit timepoint plus .tif
 	fileName = string.join((basename, image_extension), "")
 	print "Saving stack",stackIndex,"with name", fileName
-	stackImp = ImagePlus(fileName, new_stack) # generate an ImagePlus from the stack
-	IJ.save(stackImp, os.path.join(outputdir, fileName))  #... so we can save it
+	stackImp = ImagePlus(fileName, new_stack) # generate an ImagePlus from the stack so we can save it
+	IJ.save(stackImp, os.path.join(outputdir, fileName))
+	IJ.run("Collect Garbage")
 	# --- end folder loop 
 	
+#  Record end time
+end_time = System.nanoTime()
 
+#  Calculate duration
+elapsed_time = end_time - start_time
+elapsed_seconds = elapsed_time / 1000000000.0
 
-print "Finished"
+IJ.log("Finished in: " + str(elapsed_seconds) + " seconds")
 

@@ -9,7 +9,6 @@
 # From a folder of multichannel time stacks, saves all slices as multichannel tiff
 # Useful for generating images for cellpose segmentation
 
-
 # TO USE: Run the macro and specify folders for input and output.
 # Limitations: Expects either Z or T series format.
 
