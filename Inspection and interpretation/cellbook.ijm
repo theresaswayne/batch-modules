@@ -6,45 +6,47 @@
 //@String (label = "File suffix", value = ".tif") fileSuffix
 
 // cellbook.ijm
-// ImageJ/Fiji script to make gallery of fluor and segmented images for inspection
+// ImageJ/Fiji script to make gallery of fluorescence and segmented images for inspection
 
 // Theresa Swayne, 2026
-//  -------- Suggested text for acknowledgement -----------
+//  -------- Suggested text for acknowledgement by core facility users -----------
 //   "These studies used the Confocal and Specialized Microscopy Shared Resource 
 //   of the Herbert Irving Comprehensive Cancer Center at Columbia University, 
 //   funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
 
-// NOTES:  If any files in the red image folder do not have matches, they will be skipped
-//  All files must be in the same directory level -- there is no recursive search
+// Notes:  
+// Red is rendered as magenta for colorblindness support
+// If any files in the "red" image folder do not have matches, they will be skipped
+// Does not search folders recursively
+// 3D stacks are max projected before display
+// Output directory must be empty!
+// Assumes the two channel names differ only by the  
 
 // ---- Setup ----
 
 roiManager("reset");
-
-while (nImages>0) { // clean up open images
+while (nImages>0) { // close all open images
 	selectImage(nImages);
 	close();
 }
+run("Collect Garbage"); // helps to clear memory
 print("\\Clear"); // clear Log window
-
 startTime = getTime(); // keep track of time
-
+setBatchMode(true); // faster performance 
 run("Bio-Formats Macro Extensions"); // support native microscope files
-
-setBatchMode(true); // faster performance
 
 // ---- Run ----
 
-print("Starting");
+print("Processing ",fileSuffix,"images in folder", inputDir);
 
-// Call the processFolder function, including the parameters collected at the beginning of the script
-
+// call the processFolder function, including the parameters collected at the beginning of the script
+// this function will assemble the channels and segmentations with a label for each image
+// returns the number of files processed 
 n = processFolder(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, outputDir, fileSuffix);
 
-// Now make a mega montage of all of the montages
+// make a mega montage of all of the montages
 
 // count the images in the output folder (NOTE this assumes the folder has nothing else in it!)
-
 montlist = getFileList(outputDir);
 montlist = Array.sort(montlist);
 montCount = montlist.length;
@@ -103,15 +105,17 @@ for (i = 0; i < sheetCount; i++) { // loop through contact sheets
 	
 // Clean up images and get out of batch mode
 
-while (nImages > 0) { // clean up open images
+// clean up
+while (nImages > 0) { // close all open images
 	selectImage(nImages);
 	close(); 
 }
-setBatchMode("exit and display");
+setBatchMode(false);
 
+// report processing time
 time = getTime();
 elapsedTime = (time - startTime)/1000;
-print("Finished",n,"images in ", elapsedTime , " sec");
+print("Processed",n,"images in ", elapsedTime , " sec");
 
 selectWindow("Log");
 saveAs("text", outputDir + File.separator + "Cellbook_Log.txt");
@@ -140,11 +144,9 @@ function niceProjection(input) {
 	// return the image ID
 	outputID = getImageID();
 	return(outputID)
-}
+} // end of niceProjection function
 
-// Function to process a folder 
 function processFolder(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, outputDir, fileSuffix) {
-
 	// this function searches for files in the first input folder that match the criteria and sends them to the processFile function
 
 	filenum = 0;
@@ -238,7 +240,7 @@ function processFile(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, out
 	redProjID = niceProjection("red");
 	selectImage(redProjID);
 	rename("redproj");
-	run("Red");
+	run("Magenta");
 	
 	greenProjID = niceProjection("green");
 	selectImage(greenProjID);
@@ -248,7 +250,7 @@ function processFile(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, out
 	redSegProjID = niceProjection("redseg");
 	selectImage(redSegProjID);
 	rename("redsegproj");
-	run("Red");
+	run("Magenta");
 	
 	greenSegProjID = niceProjection("greenseg");
 	selectImage(greenSegProjID);
@@ -264,7 +266,7 @@ function processFile(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, out
 	// make nice colors
 	Stack.setDisplayMode("color");
 	Stack.setChannel(1); //red
-	run("Red");
+	run("Magenta");
 	Stack.setChannel(2);
 	run("Green");
 	Stack.setDisplayMode("composite");
@@ -279,7 +281,7 @@ function processFile(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, out
 	Stack.setDisplayMode("color");
 	Stack.setChannel(1); //red
 	setMinAndMax(0,1);
-	run("Red");
+	run("Magenta");
 	Stack.setChannel(2); //green
 	setMinAndMax(0,1);
 	run("Green");
@@ -294,7 +296,7 @@ function processFile(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, out
 	run("Label image to ROIs", "rm=[RoiManager[size=11, visible=true]]");
 	
 	selectWindow("redproj");
-	run("Red");
+	run("Magenta");
 	run("RGB Color");
 	roiManager("Show All");
 	// convert to an RGB overlay
