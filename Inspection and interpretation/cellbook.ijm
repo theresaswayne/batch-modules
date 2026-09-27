@@ -2,11 +2,13 @@
 //@File(label = "Green channel input directory", style = "directory") inputGreenImg
 //@File(label = "Segmented red channel input directory", style = "directory") inputRedSeg
 //@File(label = "Segmented green channel input directory", style = "directory") inputGreenSeg
+//@String (label = "Red channel name contains:") redPattern
+//@String (label = "Green channel name contains:") greenPattern
 //@File(label = "Output directory", style = "directory") outputDir
 //@String (label = "File suffix", value = ".tif") fileSuffix
 
 // cellbook.ijm
-// ImageJ/Fiji script to make gallery of fluorescence and segmented images for inspection
+// ImageJ/Fiji script to make gallery of 2-channel fluorescence and segmented images for inspection
 
 // Theresa Swayne, 2026
 //  -------- Suggested text for acknowledgement by core facility users -----------
@@ -20,7 +22,7 @@
 // Does not search folders recursively
 // 3D stacks are max projected before display
 // Output directory must be empty!
-// Assumes the two channel names differ only by the  
+// Assumes the two channel names are constructed with suffixes
 
 // ---- Setup ----
 
@@ -164,15 +166,11 @@ function processFolder(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, o
 } // end of processFolder function
 
 
-function processFile(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, outputDir, fileName, fileNumber) {
-	
-	// this function processes a single image
+function processFile(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, redPattern, greenPattern, outputDir, fileName, fileNumber) {
+	// this function processes a single "red" image and its "green" and segmented counterparts
 	
 	// Set up parameters
 	// What differentiates red and green file names?
-	
-	redChan = "c4";
-	greenChan = "c5";
 	
 	redPath = inputRedImg + File.separator + fileName;
 	print("Processing file",fileNumber," at path" ,redPath);	
@@ -182,8 +180,21 @@ function processFile(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, out
 	basename = substring(fileName, 0, dotIndex); 
 	extension = substring(fileName, dotIndex);
 	nameLength = lengthOf(basename);
-	origName = substring(basename, 0, nameLength-12); // remove "-cX-resliced"
-	print("Red image file basename is",basename,"and the original image name is",origName);
+	patternLength = lengthOf(redPattern);
+	patternLocation = indexOf(basename, redPattern);
+	patternStart = nameLength-patternLocation;
+	patternEnd = patternStart + patternLength;
+	
+	//print("Pattern starts at", patternStart,"and ends at",patternEnd);
+	
+	origName = substring(basename, 0, patternStart+2) + substring(basename, patternEnd+2, nameLength); // remove specific pattern
+	greenName = substring(basename, 0, patternStart+2) + greenPattern + substring(basename, patternEnd+2, nameLength);
+	//print(basename, origName, greenName);
+
+	//origName = substring(basename, 0, nameLength-12); // remove "-cX-resliced"
+	patternLength = lengthOf(redPattern);
+	
+	print("Red image file basename is",basename,"and the generic image name is",origName);
 	
 	// open the red image file
 	run("Bio-Formats", "open=&redPath");
@@ -192,8 +203,8 @@ function processFile(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, out
 	// open green fluor image
 	// the name is going to be the original name with the other channel number and "resliced"
 
-	greenfileName = origName + "-" + greenChan + "_resliced.tif";
-	greenPath = inputGreenImg + File.separator + greenfileName;
+	//greenfileName = origName + "-" + greenPattern + "_resliced.tif";
+	greenPath = inputGreenImg + File.separator + greenName;
 	print("Opening green image at",greenPath);
 	if (File.exists(greenPath)) {
 		run("Bio-Formats", "open=&greenPath");
