@@ -5,8 +5,13 @@
 #@ String  (label = "C2 name contains", value = "GFP") C2name
 #@ String  (label = "C3 name contains", value = "Red") C3name
 
-# merge exactly 3 channels
-# limitations: not recursive
+# ImageJ/Fiji jython script to merge exactly 3 channels
+# limitations: not recursive; images are merged in sort order
+
+#  -------- Suggested text for acknowledgement by core facility users -----------
+#   "These studies used the Confocal and Specialized Microscopy Shared Resource 
+#   of the Herbert Irving Comprehensive Cancer Center at Columbia University, 
+#   funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
 
 # ---- Setup ----
 
@@ -19,10 +24,13 @@ from ij.process import ImageProcessor, FloatProcessor, StackProcessor
 import string
 from ij.plugin import RGBStackMerge
 from ij import WindowManager
+from java.lang import System
 
+# Record start time
+start_time = System.nanoTime()
+print "Started at",start_time
 
-
-# Create the arrays first
+# Create the arrays
 
 wm = WindowManager
 
@@ -76,34 +84,23 @@ for i in range(0, len(C1)):
 	imp2 = IJ.openImage(os.path.join(inputDir,C2[i]))
 	imp3 = IJ.openImage(os.path.join(inputDir,C3[i]))
 	
-	#stk1 = imp1.getStack() # get the stack within the ImagePlus
-	#stk2 = imp2.getStack()
-	#stk3 = imp3.getStack()
-	imp1.show() # required
-	imp2.show()
-	imp3.show()
-	
 	C1file = os.path.basename(C1[i])
 	print "File basename is", C1file
 	C2file = os.path.basename(C2[i])
 	C3file = os.path.basename(C3[i])
 	
-	# use brackets to prevent spaces in filename from causing problems
-	impMerge =IJ.run("Merge Channels...", "c1=[" + C1file + "] c2=[" + C2file + "] c3=[" + C3file + "] create")
-	
-	location = C1file.split("_")[0] # part up to the first underscore
-	print "Location is", location
-	outputName = string.join((location,"_merge", image_extension), "")
-	print "Output name is", outputName
+	images = [imp1, imp2, imp3]
+	impMerge = RGBStackMerge.mergeChannels(images, False) # much faster than IJ.run
+
+	base = os.path.splitext(os.path.basename(C1file))[0]
+	outputName = string.join((base,"_merge",image_extension), "")
 	IJ.saveAs(impMerge, "Tiff", os.path.join(outputDir, outputName))
 
 	# clean up
-	# impMerge.flush()
-	# impMerge.close() # throws error
-	impMerge = None #doesn't seem to solve memory problem
-	#imp1.close()
-	#imp2.close()
-	#imp3.close()
+	# clean up
+	imp1.close()
+	imp2.close()
+	imp3.close()
 	imp1 = None
 	imp2 = None
 	imp3 = None
@@ -112,5 +109,12 @@ for i in range(0, len(C1)):
 	win.close()
 	IJ.run("Collect Garbage")
 
-IJ.log("Finished")
+#  Record end time
+end_time = System.nanoTime()
+
+#  Calculate duration
+elapsed_time = end_time - start_time
+elapsed_seconds = elapsed_time / 1000000000.0
+
+IJ.log("Finished in: " + str(elapsed_seconds) + " seconds")
 
