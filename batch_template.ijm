@@ -1,7 +1,7 @@
 //@File(label = "Input directory", style = "directory") inputDir
 //@File(label = "Output directory", style = "directory") outputDir
 //@String (label = "File suffix", value = ".nd2") fileSuffix
-//@ int(label="Some numerical parameter:")  numericalParameter
+//@int(label="Some numerical parameter:")  numericalParameter
 
 // batch_template.ijm
 // ImageJ/Fiji script to process a batch of images
@@ -19,7 +19,6 @@
 //		Remember to pass your parameters into the processFolder and processFile functions!
 //  Run the script in Fiji. 
 
-
 // ---- Setup ----
 
 while (nImages>0) { // close all open images
@@ -34,7 +33,7 @@ run("Bio-Formats Macro Extensions"); // support native microscope files
 
 // ---- Run ----
 
-print("Starting");
+print("Processing ",fileSuffix,"images in folder", inputDir);
 
 // call the processFolder function, including the parameters collected at the beginning of the script
 // returns the number of files processed 
@@ -50,7 +49,7 @@ setBatchMode(false);
 // report processing time
 time = getTime();
 elapsedTime = (time - startTime)/1000;
-print("Finished",n,"images in ", elapsedTime , " sec");
+print("Processed",n,"images in ", elapsedTime , " sec");
 
 // save log
 selectWindow("Log");

@@ -2,62 +2,58 @@
 //@File(label = "Output directory", style = "directory") outputDir
 //@String (label = "File suffix", value = ".nd2") fileSuffix
 
-// batch_max_project.ijm
+// max_project_batch.ijm
 // ImageJ/Fiji script to max project a batch of images
 // Theresa Swayne, 2025
-//  -------- Suggested text for acknowledgement -----------
+//  -------- Suggested text for acknowledgement by core facility users -----------
 //   "These studies used the Confocal and Specialized Microscopy Shared Resource 
 //   of the Herbert Irving Comprehensive Cancer Center at Columbia University, 
 //   funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
 
-// TO USE: Place all input images in the input folder.
-// 	Create a folder for the output files. 
-// 	Place your desired processing steps in the processFile function.
-// 	Collect any desired parameters in the script parameters at the top. 
-//		See ImageJ wiki for more script parameter options.
-//		Remember to pass your parameters into the processFolder and processFile functions!
-//  Run the script in Fiji. 
-//	Limitation -- cannot have >1 dots in the filename
-// 	
+// Input: a folder of stacks
+// Output: a maximum intensity projection of each stack
 
 // ---- Setup ----
 
-while (nImages>0) { // clean up open images
+while (nImages>0) { // close all open images
 	selectImage(nImages);
 	close();
 }
+run("Collect Garbage"); // helps to clear memory
 print("\\Clear"); // clear Log window
-
-run("Collect Garbage"); // clear memory
-	
-setBatchMode(true); // faster performance
+startTime = getTime(); // keep track of time
+setBatchMode(true); // faster performance 
 run("Bio-Formats Macro Extensions"); // support native microscope files
-
 
 // ---- Run ----
 
-print("Starting");
+print("Processing ",fileSuffix,"images in folder", inputDir);
 
-// Call the processFolder function, including the parameters collected at the beginning of the script
+// call the processFolder function, including the parameters collected at the beginning of the script
+// returns the number of files processed 
+n = processFolder(inputDir, outputDir, fileSuffix);
 
-processFolder(inputDir, outputDir, fileSuffix);
-
-// Clean up images and get out of batch mode
-
-while (nImages > 0) { // clean up open images
+// clean up
+while (nImages > 0) { // close all open images
 	selectImage(nImages);
 	close(); 
 }
 setBatchMode(false);
-print("Finished");
-run("Collect Garbage"); // clear memory
+
+// report processing time
+time = getTime();
+elapsedTime = (time - startTime)/1000;
+print("Processed",n,"images in ", elapsedTime , " sec");
+
+// save log
+selectWindow("Log");
+saveAs("text", outputDir + File.separator + "Projection_Log.txt");
 
 // ---- Functions ----
 
 function processFolder(input, output, suffix) {
-
 	// this function searches for files matching the criteria and sends them to the processFile function
-	filenum = -1;
+	filenum = 0;
 	print("Processing folder", input);
 	// scan folder tree to find files with correct suffix
 	list = getFileList(input);
@@ -71,39 +67,45 @@ function processFolder(input, output, suffix) {
 			processFile(input, output, list[i], filenum); // passes the filename and parameters to the processFile function
 		}
 	}
+	return filenum;
 } // end of processFolder function
 
-
 function processFile(inputFolder, outputFolder, fileName, fileNumber) {
-
-
 	// this function processes a single image
-	run("Collect Garbage"); // clear memory
-	run("Fresh Start"); // closes all images, clears ROIs and results to solve memory leak
-	// see https://forum.image.sc/t/memory-not-clearing-over-time/2137/45 
-	//   and https://forum.image.sc/t/fresh-start-macro-command-in-imagej-fiji/43102/7
+	
 	path = inputFolder + File.separator + fileName;
-	print("Processing file",fileNumber," at path" ,path);	
 
-	// determine the name of the file without extension
-	dotIndex = lastIndexOf(fileName, ".");
-	basename = substring(fileName, 0, dotIndex); 
-	extension = substring(fileName, dotIndex);
+	// determine the name of the file without extension -- support ome tiff
+    if(endsWith(fileName, ".ome.tiff")){
+	    basename_temp = File.getNameWithoutExtension(fileName);
+	    basename = File.getNameWithoutExtension(basename_temp);
+	    extension = ".ome.tiff";
+    }
+    else{
+		dotIndex = lastIndexOf(fileName, ".");
+	    basename = File.getNameWithoutExtension(basename);
+		extension = substring(fileName, dotIndex);
+    }
+
+	print("Processing image",fileNumber," at path" ,path, "with basename",basename, "and extension",extension );	
 	
-	print("Processing file at path" ,path,", with basename",basename);
-	
-	// open the file
+	// open the file as a virtual stack to save time and memory
 	run("Bio-Formats", "open=&path virtual");
 
+	// make the projection
 	run("Z Project...", "projection=[Max Intensity]");
 	
-	selectWindow("MAX_"+fileName);
 	// save the output
 	outputName = basename + "-MaxIP.tif";
+	selectWindow("MAX_"+fileName);
 	saveAs("tiff", outputFolder + File.separator + outputName);
-	close();
+	
+	// clean up
+	while (nImages > 0) { // close all open images
+		selectImage(nImages);
+		close(); 
+	}
 	run("Collect Garbage"); // clear memory
-
 } // end of processFile function
 
 

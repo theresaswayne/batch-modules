@@ -1,85 +1,101 @@
-// @File(label = "Input directory", style = "directory") inputdir
-// @File(label = "Output directory", style = "directory") outputdir
-// @String(label = "File suffix", value = ".tif") suffix
-//@ int(label="Channel to process:")  chan
-//@Double (label = "Reslice Z step size", value = 0.0645, stepSize=0.001) reslice
+// @File(label = "Input directory", style = "directory") inputDir
+// @File(label = "Output directory", style = "directory") outputDir
+// @String(label = "File suffix", value = ".tif") fileSuffix
+// @int(label="Channel to process:")  chan
+// @Double(label = "Reslice Z step size", value = 0.0645, stepSize=0.001) reslice
 
-// Note: DO NOT DELETE OR MOVE THE FIRST FEW LINES -- they supply essential parameters.
-
-// IJ1 macro to prepare images for 3D analysis
-// Can be used to make voxels isotropic (same xyz size) by reslicing in Z direction
-// Input: folder of multi-channel z stacks with z spacing <> xy spacing
-// Output: single-channel processed stacks.
-
-// TO USE THIS MACRO: 
-// 	Place your images in a folder.
-//	Create a separate output folder to store the results.
-//	Open this file in Fiji and click Run.
-
-// T. Swayne, for Pon lab, 2018, updated 2026
-//  -------- Suggested text for acknowledgement -----------
+// make_isotropic_channels_batch.ijm
+// ImageJ/Fiji script to prepare multichannel Z stacks for 3D analysis
+// Theresa Swayne, 2026
+////  -------- Suggested text for acknowledgement by core facility users -----------
 //   "These studies used the Confocal and Specialized Microscopy Shared Resource 
 //   of the Herbert Irving Comprehensive Cancer Center at Columbia University, 
 //   funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
 
+// Input: folder of multichannel z stacks
+// Output: single-channel stacks, optionally resampled in the Z axis to a desired spacing
+
 
 // ---- Setup
 
-while (nImages>0) { // clean up open images
+while (nImages>0) { // close all open images
 	selectImage(nImages);
 	close();
 }
-run("Collect Garbage");
-		
-run("Bio-Formats Macro Extensions"); // enables access to macro commands
-setBatchMode(true); 
-n=0;
+run("Collect Garbage"); // helps to clear memory
 print("\\Clear"); // clear Log window
+startTime = getTime(); // keep track of time
+setBatchMode(true); // faster performance 
+run("Bio-Formats Macro Extensions"); // support native microscope files
 
-// keep track of time
-startTime = getTime();
+// ---- Run ----
 
-print("Processing ",suffix,"images in folder", inputdir);
+print("Processing ",fileSuffix,"images in folder", inputDir);
 print("Reslicing channel",chan,"to get a Z step size of",reslice);
 
-// ---- Commands to run the processing functions
+// call the processFolder function, including the parameters collected at the beginning of the script
+// returns the number of files processed 
+n = processFolder(inputDir, outputDir, fileSuffix, chan, reslice); 
 
-n = processFolder(inputdir, outputdir, suffix, chan, reslice); // actually do the analysis
+// clean up
+while (nImages>0) { // close all open images
+	selectImage(nImages);
+	close();
+}
 setBatchMode(false);
 
+// report processing time
 time = getTime();
 elapsedTime = (time - startTime)/1000;
-print("Finished",n,"images in", elapsedTime , "sec");
+print("Processed",n,"images in", elapsedTime , "sec");
 
 // save Log
 selectWindow("Log");
-saveAs("text", outputdir + File.separator + "Reslice_C" + chan +  "_Log.txt");
+saveAs("text", outputDir + File.separator + "Reslice_C" + chan +  "_Log.txt");
 
+// ---- Functions ----
 
-// ---- Function for processing folders
-function processFolder(inputdir, outputdir, suffix, chan, reslice) 
-	{
-	list = getFileList(inputdir);
+function processFolder(inputDir, outputDir, fileSuffix, chan, reslice) {
+	// this function searches for files matching the criteria and sends them to the processFile function
+
+	filenum = 0;
+	print("Processing folder", input);
+	list = getFileList(inputDir);
 	for (i=0; i<list.length; i++) 
 		{
-	    if(File.isDirectory(inputdir + File.separator + list[i])) {
-			n = processFolder("" + inputdir +File.separator+ list[i]); }
-	    else if (endsWith(list[i], suffix)) {
-	    	n = n+1;
-	       	processImage(inputdir, list[i], outputdir, suffix, chan, reslice); } 
+	    if(File.isDirectory(inputDir + File.separator + list[i])) {
+			processFolder("" + inputDir +File.separator+ list[i]); 
+			}
+	    else if (endsWith(list[i], fileSuffix)) {
+			filenum = filenum + 1;
+	       	processFile(inputDir, outputDir, list[i], filenum, fileSuffix, chan, reslice); 
+	       	} 
 		}
-	return n;
-	}
+	return filenum;
+} // end of processFolder function
 
-// ------- Function for processing individual files
 
-function processImage(inputdir, name, outputdir, suffix, chan, reslice) 
-	{
-	// ---- Open image and get name, info
-	open(inputdir + File.separator + name);
-	print("processing image", name);
-	dotIndex = lastIndexOf(name, ".");
-	basename = substring(name, 0, dotIndex);
+function processFile(inputFolder, outputFolder, fileName, fileNumber, fileSuffix, chan, reslice) {
+	// this function processes a single image
+
+	path = inputFolder + File.separator + fileName;
+
+	// determine the name of the file without extension -- support ome tiff
+    if(endsWith(fileName, ".ome.tiff")){
+	    basename_temp = File.getNameWithoutExtension(fileName);
+	    basename = File.getNameWithoutExtension(basename_temp);
+	    extension = ".ome.tiff";
+    }
+    else{
+		dotIndex = lastIndexOf(fileName, ".");
+	    basename = File.getNameWithoutExtension(basename);
+		extension = substring(fileName, dotIndex);
+    }
+
+	print("Processing image",fileNumber," at path" ,path, "with basename",basename, "and extension",extension );	
+	
+	// open the file
+	run("Bio-Formats", "open=&path");
 
 	getVoxelSize(voxwidth, voxheight, depth, unit);
 	getDimensions(stackwidth, stackheight, channels, slices, frames);
@@ -89,9 +105,8 @@ function processImage(inputdir, name, outputdir, suffix, chan, reslice)
 	if (chan > channels) { // error in selection
 		showMessage("That channel does not exist in this file!");
 		continue; 
-		}
+	}
 	else {
-		
 		dupName = basename + "-c"+chan;
 		run("Duplicate...", "title="+dupName+" duplicate channels="+chan);
 	
@@ -106,13 +121,14 @@ function processImage(inputdir, name, outputdir, suffix, chan, reslice)
 		//setVoxelSize(voxwidth, voxheight, voxwidth, unit);
 	
 		// save processed image
-		saveAs("tiff", outputdir + File.separator + processedName);
-		
-		// clean up
-		while (nImages > 0) {
-			close(); }
-			}
-		run("Collect Garbage");
-	
-	} // end processImage function
+		saveAs("tiff", outputFolder + File.separator + processedName);
+	}
+
+	// clean up
+	while (nImages > 0) { // close all open images
+		selectImage(nImages);
+		close(); 
+	}
+	run("Collect Garbage"); // helps to clear memory
+} // end processFile function
 	
