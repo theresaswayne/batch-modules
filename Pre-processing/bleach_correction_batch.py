@@ -3,13 +3,16 @@
 #@ String(label="Image File Extension", required=false, value=".tif") image_extension
 #@ String  (label = "File name contains", value = "") containString
 
-# Batch bleach correction in Fiji
-# Theresa Swayne, 2024
-# Adapted from Kota Miura's script at https://gist.github.com/miura/9080feb52eb74079ae393dd9320cb6ed 
+# bleach_correction_batch.py
+# ImageJ/Fiji jython script 
+# Theresa Swayne, 2024, adapted from Kota Miura's script at https://gist.github.com/miura/9080feb52eb74079ae393dd9320cb6ed 
 
-# TO USE: Run the macro and specify folders for input and output, and select the image extension.
+#  -------- Suggested text for acknowledgement by core facility users -----------
+#   "These studies used the Confocal and Specialized Microscopy Shared Resource 
+#   of the Herbert Irving Comprehensive Cancer Center at Columbia University, 
+#   funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
 
-# Limitations: If the plugin finds that any dataset is "not decaying" it will stop.
+# Limitations: If the BleachCorrection function finds that any dataset is "not decaying" (no bleaching detected) it will stop.
 
 # ---- Setup ----
 
@@ -21,7 +24,11 @@ from ij import IJ, ImagePlus, ImageStack
 from ij.process import ImageProcessor, FloatProcessor, StackProcessor
 import string
 from emblcmci import BleachCorrection
+from java.lang import System
 
+# Record start time
+start_time = System.nanoTime()
+IJ.log("Started at " + str(start_time))
 
 # ---- Find image files ---- 
 inputdir = str(inDir) # convert the directory object into a string
@@ -80,6 +87,13 @@ for fname in fnames:
 	IJ.saveAs(impcorrected, "Tiff", os.path.join(outputdir, outputName));
 	#imp.close()
  
-IJ.log("Finished")
+#  Record end time
+end_time = System.nanoTime()
+
+#  Calculate duration
+elapsed_time = end_time - start_time
+elapsed_seconds = elapsed_time / 1000000000.0
+
+IJ.log("Finished in: " + str(elapsed_seconds) + " seconds")
 
 

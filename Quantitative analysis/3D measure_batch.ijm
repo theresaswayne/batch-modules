@@ -4,9 +4,9 @@
 //@String (label = "File suffix", value = ".tif") fileSuffix
 //@String (label = "Object Name", value = "LD") objectName
 
-// ImageJ/Fiji script to process a batch of images
-// Theresa Swayne
-//  -------- Suggested text for acknowledgement -----------
+// ImageJ/Fiji script to measure a batch of images using a previously generated segmentation (label mask)
+// Theresa Swayne, 2025-2026
+//  -------- Suggested text for acknowledgement by core facility users -----------
 //   "These studies used the Confocal and Specialized Microscopy Shared Resource 
 //   of the Herbert Irving Comprehensive Cancer Center at Columbia University, 
 //   funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
@@ -17,22 +17,24 @@
 
 //	Limitation -- cannot have >1 dots in the filename
 // 	
-// Updated to use 3D Manager 
+// Requires 3D ImageJ Suite  
 // see https://mcib3d.frama.io/3d-suite-imagej/plugins/3DManager/3D-Manager-macros/
 
 // ---- Setup ----
 
-while (nImages>0) { // clean up open images
+while (nImages>0) { // close all open images
 	selectImage(nImages);
 	close();
 	}
+run("Collect Garbage"); // helps to clear memory
 print("\\Clear"); // clear Log window
-run("Clear Results");
-
-setBatchMode(true); // faster performance
+startTime = getTime(); // keep track of time
+setBatchMode(true); // faster performance 
 run("Bio-Formats Macro Extensions"); // support native microscope files
 
-// collect log in a table with a time/date stamp
+run("Clear Results");
+
+// collect log in a table with a time/date stamp; this allows us to "Fresh Start" if needed to preserve memory
 startTime = getTime();
 getDateAndTime(year, month, dayOfWeek, dayOfMonth, hour, minute, second, msec);
 month = month+1;
@@ -50,18 +52,17 @@ n=0;
 
 // ---- Run ----
 
-print("Starting");
+print("Processing ",fileSuffix,"images in folder", imageInputDir, "and segmentations in",segInputDir);
 
-// set up measurements
+// set up 3D measurements
 // options: important to NOT show as IJ results table beause it conflicts with the other table
 run("3D Manager Options", "volume integrated_density mean_grey_value feret centroid_(pix) centroid_(unit) distance_to_surface objects radial_distance distance_between_centers=0 distance_max_contact=0 drawing=Contour use_0");
 
 // Call the processFolder function, including the parameters collected at the beginning of the script
 n = processFolder(imageInputDir, segInputDir, outputDir, fileSuffix, objectName);
 
-// Clean up images and get out of batch mode
-
-while (nImages > 0) { // clean up open images
+// clean up
+while (nImages > 0) { // close all open images
 	selectImage(nImages);
 	close(); 
 }
@@ -70,18 +71,12 @@ run("Clear Results");
 
 time = getTime();
 elapsedTime = (time - startTime)/1000;
-logString = "Finished " + n + " images in " + elapsedTime + " sec";
+logString = "Processed " + n + " images in " + elapsedTime + " sec";
 File.append(logString, logFile);
-
-//save Log
-//selectWindow("Log");
-//saveAs("text", outputDir + File.separator + "Log.txt");
-
 
 // ---- Functions ----
 
 function processFolder(imginput, seginput, output, suffix, objname) {
-
 	// this function searches for files matching the criteria and sends them to the processFile function
 	filenum = 0;
 	print("Processing folder", imginput);
@@ -102,44 +97,36 @@ function processFolder(imginput, seginput, output, suffix, objname) {
 
 
 function processFile(imgInputFolder, segInputFolder, outputFolder, imgFile, fileNumber, objName) {
-	
 	// this function processes a single image
-	run("Fresh Start"); // clears log, results, etc.
+
+	run("Fresh Start"); // clears log, results, etc. -- important for saving memory
 	// initialize 3D functions
 	run("3D Manager");
 	Ext.Manager3D_Close(); // suggested by  https://forum.image.sc/t/how-to-speed-up-adding-or-removing-objects-in-3d-manager/110750/5 to move mgr to background
 	//Ext.Manager3D_Reset();
 
-	
 	imgPath = imgInputFolder + File.separator + imgFile;
 
-	// determine the name of the file without extension
-	dotIndex = lastIndexOf(imgFile, ".");
-	//rawBasename = substring(imgFile, 0, dotIndex); 
-	//reslIndex = indexOf(rawBasename, "_resliced");
-	//basename = substring(rawBasename, 0, reslIndex);
-	basename = substring(imgFile, 0, dotIndex);
-	extension = substring(imgFile, dotIndex);
+	// determine the name of the file without extension -- support ome tiff
+    if(endsWith(fileName, ".ome.tiff")){
+	    basename_temp = File.getNameWithoutExtension(fileName);
+	    basename = File.getNameWithoutExtension(basename_temp);
+	    extension = ".ome.tiff";
+    }
+    else{
+		dotIndex = lastIndexOf(fileName, ".");
+	    basename = File.getNameWithoutExtension(basename);
+		extension = substring(fileName, dotIndex);
+    }
 	
-	logString = "Processing file " + fileNumber + " at path " + imgPath + " with basename " + basename;
+	logString = "Processing image " + fileNumber + " at path " + imgPath + " with basename " + basename;
 	File.append(logString, logFile);	
 
 	// open the image file
 	run("Bio-Formats", "open=&imgPath");
-	//open(imgPath);
 	
 	// rename for easier handling
 	rename("dup");
-
-	// Duplicate the image
-	//dupName = "dup";
-	//run("Duplicate...", "title="+dupName+" duplicate");
-
-	// close the original
-	//selectWindow(imgFile);
-	//close();
-
-	//wait(1000); // a little space to let things catch up
 	
 	// check for the segmented image
 	segFile = basename + "_seg.tif";
@@ -149,7 +136,6 @@ function processFile(imgInputFolder, segInputFolder, outputFolder, imgFile, file
 	if (!(File.exists(segPath))) {
 		logString = "No segmented image found for " + basename;
 		File.append(logString, logFile);
-		//print("No segmented image found for", basename);
 		close("*");
 		while(nImages!=0) wait(500);
 		run("Collect Garbage");
@@ -158,16 +144,8 @@ function processFile(imgInputFolder, segInputFolder, outputFolder, imgFile, file
 	else {
 		run("Bio-Formats", "open=&segPath");
 		
-		// set up options with redirect
-		//run("3D OC Options", "volume nb_of_obj._voxels integrated_density mean_gray_value median_gray_value maximum_gray_value centroid dots_size=5 font_size=10 store_results_within_a_table_named_after_the_image_(macro_friendly) redirect_to="+dupName);
-		//run("3D OC Options", "volume nb_of_obj._voxels integrated_density mean_gray_value median_gray_value maximum_gray_value centroid mean_distance_to_surface median_distance_to_surface bounding_box dots_size=5 font_size=10 store_results_within_a_table_named_after_the_image_(macro_friendly) redirect_to=dup");
-
 		selectImage(segFile);
 		rename("seg");
-
-		// close the original
-		//selectWindow(binFile);
-		//close();
 		
 		wait(500); // a little space to let things catch up
 
@@ -183,7 +161,6 @@ function processFile(imgInputFolder, segInputFolder, outputFolder, imgFile, file
 			return; // go to next file in folder
 		}
 		else {
-			//run("3D Objects Counter", "threshold=1 slice=10 min.=1 max.=723975 statistics");
 			// add segmented objects to the mgr
 			selectWindow("seg");
 			Ext.Manager3D_AddImage();
@@ -192,35 +169,28 @@ function processFile(imgInputFolder, segInputFolder, outputFolder, imgFile, file
 			
 			logString = "Found " + objCount + " " + objName + " objects in image " + basename;
 			File.append(logString, logFile);
-			//print("Found", objCount, "objects in image", basename);
 			
 			selectWindow("dup"); // activate the ROIs on the fluorescence image
 			
 			Ext.Manager3D_Quantif();
+			// save results; Q is prepended automatically
 			Ext.Manager3D_SaveResult("Q", outputDir + File.separator + basename + "_" + objName + "_quant_results.csv");
 			Ext.Manager3D_CloseResult("Q");
 			
 			Ext.Manager3D_Measure(); 
-			// save results; M is prepended whether you want it or not
-			//Ext.Manager3D_SaveResult("M",subFolder + "allMeas.csv");
+			// save results; M is prepended automatically
 			Ext.Manager3D_SaveResult("M", outputDir + File.separator + basename + "_" + objName + "_meas_results.csv");
 			Ext.Manager3D_CloseResult("M");
 			
-			// save results
-			//statsName = "Statistics for seg redirect to dup"; // renaming the images helps with referring to this window
-			//selectWindow(statsName);
-			//saveAs("Results", outputDir + File.separator + basename + "_results.csv");
-			//run("Close");
 			run("Clear Results");
 			Ext.Manager3D_Reset();
 		}
 		// clean up before next cycle
 		close("*");
-		while(nImages!=0) wait(500);
+		while(nImages!=0) wait(500); // waits for "close" to catch up
 		run("Collect Garbage");
 		wait(500); // a little space to let things catch up
 	}	
-
 } // end of processFile function
 
 

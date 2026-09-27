@@ -6,12 +6,12 @@
 //@File(label = "Output ROI and measurement folder:", style = "directory") outputRoiDir
 //@Integer(label = "Minimum area for objects (scaled units):", value = 10) minSize
 
-// measure_from_label_image_marie_batch.ijm
+// measure_from_label_image_batch.ijm
 // ImageJ/Fiji macro by Theresa Swayne, Columbia University, 2025-26
-// Process a batch of images (multichannel, z and/or t) and corresponding label images
+// Gets 2D measurements from a batch of 2-channel time stacks and corresponding label images
+// Eliminates labels touching the edges of the image and optionally eliminates labels below a specified area
 
-
-//  -------- Suggested text for acknowledgement -----------
+//  -------- Suggested text for acknowledgement by core facility users -----------
 //   "These studies used the Confocal and Specialized Microscopy Shared Resource 
 //   of the Herbert Irving Comprehensive Cancer Center at Columbia University, 
 //   funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
@@ -20,49 +20,41 @@
 //   The label image is expected to have the same name as the masks (minus extension) followed by the suffix provided.
 //	 Label images can be in the same or a different folder (but not nested in the image folder!)
 
-// Output:  ROIsets
-//			overlays of the ROIs on first timepoint
-//			measurements of ROIs in all channels, all slices
+// Output:  2D ROIsets representing the labels
+//			measurements of ROIs in all channels, all slices (one CSV file per channel)
 
-// Specific modifications for Olive lab: 
-// -- assumes stack is a single z over time, and re-orders hyperstack accordingly, if needed
-// -- colorizes C1 = green, C2 = red (based on re-merged images used for cellpose; verify colors vs original images to ensure accuracy)
-// -- rescales assuming pixel size = 1.65 um based on 4x lens of Cytation 5
-// -- sets time interval of 2 hr (7200 sec) 
-
-// LIMITATIONS: Drawing ROIs currently produces all ROIs rather than just one slice
+// LIMITATIONS: Not tested on 4D stacks
+// Not recursive (doesn't process nested folders)
+// May still leave some cells on edges, 
+//  due to some images having partial black borders before segmentation)
 
 // ---- Setup ----
 
-while (nImages>0) { // clean up open images
+while (nImages>0) { // close all open images
 	selectImage(nImages);
 	close();
 }
+run("Collect Garbage"); // helps to clear memory
+print("\\Clear"); // clear Log window
+startTime = getTime(); // keep track of time
+setBatchMode(true); // faster performance 
+run("Bio-Formats Macro Extensions"); // support native microscope files
+
+// set up for measurement and ROIs
 run("Clear Results");
-IJ.log("\\Clear"); // clear Log window
 roiManager("reset");
-run("Bio-Formats Macro Extensions"); // supports native microscope files
-
-// keep track of time
-startTime = getTime();
-
-// set up measurements 
 run("Set Measurements...", "area mean centroid stack display redirect=None decimal=3");
-
-setBatchMode(true); // faster performance but may not work for all functions
 
 // ---- Run ----
 
-print("Starting");
+print("Processing ",imageSuffix,"images in folder", inputImageDir);
 
 // Call the processFolder function, including the parameters collected at the beginning of the script
-// collect number of files processed
-
+// returns the number of files processed 
 filenum = processFolder(inputImageDir, inputLabelDir, imageSuffix, labelSuffix, outputImageDir, outputRoiDir, minSize);
 
-// Clean up images and get out of batch mode
-
-while (nImages > 0) { // clean up open images
+// clean up
+while (nImages > 0) { // close all open images
 	selectImage(nImages);
 	close(); 
 }
@@ -76,22 +68,17 @@ print("Processed",filenum,"images in", elapsedTime , "sec");
 selectWindow("Log");
 saveAs("text", outputRoiDir + File.separator + "Measure_Log.txt");
 
-
 // ---- Functions ----
 
 function processFolder(inputImageDir, inputLabelDir, imageSuffix, labelSuffix, outputImageDir, outputRoiDir, minSize) {
-
 	// this function searches for files matching the criteria and sends them to the processFile function
+
 	filenum = 0;
 	print("Processing folder", inputImageDir);
 	// scan folder tree to find files with correct suffix
 	list = getFileList(inputImageDir);
 	list = Array.sort(list);
 	for (i = 0; i < list.length; i++) {
-		// do not handle nested folders as this is not likely to occur with single label directory
-		//if(File.isDirectory(input + File.separator + list[i])) {
-			//processFolder(input + File.separator + list[i], inputLabelDir, fileSuffix, labelSuffix, imagePath, roiPath); // handles nested folders
-		//}
 		if(endsWith(list[i], imageSuffix)) {
 			filenum = filenum + 1;
 			processFile(inputImageDir, inputLabelDir, imageSuffix, labelSuffix, outputImageDir, outputRoiDir, list[i], filenum, minSize); // passes the filename and parameters to the processFile function
@@ -102,20 +89,12 @@ function processFolder(inputImageDir, inputLabelDir, imageSuffix, labelSuffix, o
 
 
 function processFile(inputImageDir, inputLabelDir, imageSuffix, labelSuffix, outputImageDir, outputRoiDir, fileName, fileNumber, minSize) {
-	
 	// this function processes a single image
 	
 	// ---------- SETUP
 	
 	imagePath = inputImageDir + File.separator + fileName;
 	
-	// open the image file
-	run("Bio-Formats", "open=&imagePath");
-	id = getImageID();
-	rename("image");
-	//getPixelSize(scaleUnit, pixelWidth, pixelHeight);
-	//print("Pixel size in the image is",pixelWidth);
-			 
 	// determine the name of the file without extension -- support ome tiff
     if(endsWith(fileName, ".ome.tiff")){
 	    basename_temp = File.getNameWithoutExtension(fileName);
@@ -127,15 +106,19 @@ function processFile(inputImageDir, inputLabelDir, imageSuffix, labelSuffix, out
 	    basename = File.getNameWithoutExtension(fileName);
 		extension = substring(fileName, dotIndex);
     }
-	
+    
 	print("Processing image",fileNumber," at path" ,imagePath, "with basename",basename, "and extension",extension );	
+
+	// open the image file
+	run("Bio-Formats", "open=&imagePath");
+	id = getImageID();
+	rename("image");
 	
-	// set the dimensions properly
-	
+	// get the dimensions and scaling 
 	selectWindow("image");
 	getDimensions(width, height, channels, slices, frames);
 	getPixelSize(unit, pixelWidth, pixelHeight);
-	print("Initial properties:", slices, "slices,",frames, "frames, pixel size",pixelWidth);
+	print("Image properties:", slices, "slices,",frames, "frames, pixel size",pixelWidth);
 	
 	// Assuming it's 1Z and multiple T, check if we need to re-order stack
 	if (slices != 1 && frames ==1) {
@@ -145,13 +128,6 @@ function processFile(inputImageDir, inputLabelDir, imageSuffix, labelSuffix, out
 	else {
 		print("No re-ordering necessary");
 	}
-
-	// set pixel size and time interval assuming every 2 hrs
-	run("Properties...", "pixel_width=1.65 pixel_height=1.65 voxel_depth=1 frame=7200");
-	run("Set Scale...", "distance=1 known=1.65 unit=micron"); // to get unit
-	getDimensions(width, height, channels, slices, frames);
-	getPixelSize(unit, pixelWidth, pixelHeight);
-	print("Updated properties:", slices, "slices,",frames, "frames, pixel size",pixelWidth);
 	
 	// open the corresponding label image
 	labelPath = inputLabelDir + File.separator + basename + labelSuffix;
@@ -176,7 +152,7 @@ function processFile(inputImageDir, inputLabelDir, imageSuffix, labelSuffix, out
 	selectImage("label-killBorders");
 	rename("label");
 	
-	// filtering by area
+	// filter by area (convert scaled units to pixels)
 	minSizePixels = minSize/(pixelWidth*pixelWidth);
 	print("Removing ROIs smaller than", minSize, "scaled units (",minSizePixels,"pixels)");
 	selectImage("label");
@@ -201,89 +177,11 @@ function processFile(inputImageDir, inputLabelDir, imageSuffix, labelSuffix, out
 	numROIs = roiManager("count");
 	print("After editing the labels, there are",numROIs, "ROIs");
 	
-	// ---------- DOCUMENT ROI LOCATIONS  TODO: Report / resolve bug where all ROIs are drawn -- or work around by using only 1st slice of label image
-
-	selectWindow("image");
-	
-	// view as composite using the 1st timepoint, middle slice
-	if (frames > 1) {
-		Stack.setFrame(1);
-	}
-	if (slices > 1) {
-		midslice = Math.ceil(slices/2);
-		Stack.setSlice(midslice);
-	}
-	if (channels > 1) {
-		// auto contrast all channels and fix colors specific to Cytation images
-		Stack.setDisplayMode("color");
-		
-		print("Colorizing C1 = green, C2 = red");
-		
-		Stack.setChannel(2);
-		resetMinAndMax;
-		run("Red");
-
-		Stack.setChannel(1);
-		resetMinAndMax;
-		run("Green");
-		
-		if (is("composite")) {
-			Stack.setDisplayMode("composite"); // this command raises error if image is not composite
-		}
-	}
-	else { 
-		// auto contrast a single channel 
-		resetMinAndMax;
-	}
-	
-	// create an RGB snapshot
-	
-	selectWindow("image");
-	run("Select None");
-
-	if (is("composite")) {
-		print("Creating overlay from composite image");
-		Stack.setDisplayMode("composite"); // this command raises error if image is not composite
-		run("Stack to RGB", "keep"); // create a single RGB image while keeping the original
-	}
-	else {
-		print("Creating overlay from single channel image"
-	//	run("Duplicate...", "title=copy duplicate"); // for single-channel non-RGB images; Flatten doesn't create new window
-		run("Duplicate...", "title=copy"); // for single-channel non-RGB images; Flatten doesn't create new window
-	}
-	rgbID = getImageID(); // current image, should be the RGB or the duplicate
-	selectImage(rgbID);
-	
-	// display ROIs on the image -- 
-	RoiManager.associateROIsWithSlices(true);
-	roiManager("Show All"); // if this is not selected 
-	RoiManager.selectPosition(0, 0, 1); // select all ROIs from frame 1 irrespective of channel or slice
-	//RoiManager.useNamesAsLabels(true);
-	//run("Labels...", "color=white font=8 show draw bold"); // increase label size above the default
-
-	run("Flatten"); // now we should have a new RGB with flattened overlay
-	flatID = getImageID();
-	selectImage(flatID);
-	saveAs("tiff", outputImageDir+File.separator+basename+"_ROIlocs.tif");
-	
-	print("Saved snapshot for image",basename);
-	
-	// close images from snapshot generation
-	if (isOpen(flatID)) {
-		selectImage(flatID);
-		close();
-	}
-	if (isOpen(rgbID)) {
-		selectImage(rgbID);
-		close();
-	}
-		
 	// save the ROI set renamed in sequence
 	roiFile = basename + "_ROIs.zip"; 
 	roiPath = outputRoiDir + File.separator +roiFile;
 	roiManager("deselect"); // ensure all ROIs are saved
 	roiManager("save", roiPath);
-	
 	
 	// ---- Measurement ----
 	
@@ -307,7 +205,7 @@ function processFile(inputImageDir, inputLabelDir, imageSuffix, labelSuffix, out
 		raw_length = lengthOf(roi_raw);		
 		roi_id = substring(roi_raw, 0, raw_length-6);
 		//basename = label_array[label_length-1];
-		newLabel = basename + "_t_"+frame+"_Cell_" + roi_id;
+		newLabel = basename + "_t_"+frame+"_ROI_" + roi_id;
     	setResult('Label', i, newLabel);
 		}
 	updateResults();
@@ -350,8 +248,8 @@ function processFile(inputImageDir, inputLabelDir, imageSuffix, labelSuffix, out
 	roiManager("Reset");
 	run("Clear Results");
 
-	// extra cleanup step
-	while (nImages > 0) { // clean up open images
+	// clean up
+	while (nImages > 0) { // close all open images
 		selectImage(nImages);
 		close(); 
 	}

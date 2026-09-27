@@ -3,7 +3,18 @@
 #@ String(label="Image File Extension", required=false, value=".tif") image_extension
 #@ String  (label="Channel for segmentation", choices={"0","1","2","3"}, style="listBox") detectorChannel
 
+# ImageJ/Fiji jython script to track objects in Trackmate using the label image detector detector and LAP Tracker 
 # based on https://forum.image.sc/t/jython-trackmate-cellpose-sam-cpsam-not-found-for-segment/120031/9
+
+# input: Folder of single-channel or multichannel time stacks (not tested on 4D images) with one channel consisting of label images (e.g. from previously run Cellpose)
+# output: Trackmate XML for each time series; CSV tables of spots, tracked spots, and tracks
+
+#  -------- Suggested text for acknowledgement by core facility users -----------
+#   "These studies used the Confocal and Specialized Microscopy Shared Resource 
+#   of the Herbert Irving Comprehensive Cancer Center at Columbia University, 
+#   funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
+
+# ---- Setup ----
 
 import sys
 import os
@@ -49,25 +60,18 @@ from fiji.plugin.trackmate.features.spot import SpotContrastAndSNRAnalyzerFactor
 from fiji.plugin.trackmate.features.edges import EdgeSpeedAnalyzer, EdgeTargetAnalyzer, EdgeTimeLocationAnalyzer, DirectionalChangeAnalyzer
 from fiji.plugin.trackmate.features.track import TrackBranchingAnalyzer, TrackDurationAnalyzer, TrackIndexAnalyzer, TrackLocationAnalyzer, TrackSpeedStatisticsAnalyzer, TrackMotilityAnalyzer
 
-# ---- Setup ----
+from java.lang import System
+
+
 
 # We have to do the following to avoid errors with UTF8 chars generated in 
 # TrackMate that will mess with our Fiji Jython.
 reload(sys)
 sys.setdefaultencoding('utf-8')
 
-CELLPOSE_MODELS = os.path.join(os.path.expanduser(""), ".cellpose", "models")
-
-# Get currently selected image
-# imp = WindowManager.getCurrentImage()
-#imp = IJ.openImage('https://fiji.sc/samples/FakeTracks.tif')
-#imp.show()
-
 # ---- Functions ----- 
 
-
 ## free memory
-
 def close_original(imp):
 	imp.changes = False
 	imp.close()
@@ -75,7 +79,6 @@ def close_original(imp):
 	print("Original closed.")
 
 ## swap z and t because the stack will default to Z mode
-
 def swap_zt(imp): # requires 2d stack
     IJ.selectWindow(imp.getTitle())
     imp.setDimensions(imp.getNChannels(), 1, imp.getNSlices()) # order: channels zslices frames
@@ -86,24 +89,16 @@ def swap_zt(imp): # requires 2d stack
     return imp
 	
 ## TrackMate with LAP tracker
-
 def run_trackmate(imp, channel):
 	print('Starting TrackMate...')
 	model = Model()
 	model.setLogger(Logger.IJ_LOGGER)
 	settings = Settings(imp)
 	settings.initialSpotFilterValue = -1.
-	#settings.detectorFactory = CellposeSAMDetectorFactory()
 	settings.detectorFactory = LabelImageDetectorFactory()
 	settings.detectorSettings = {
-		#'CELLPOSE_PYTHON_FILEPATH' : "/opt/anaconda3/envs/cellpose/bin/python",
-		#'CONDA_ENV' : 'cellpose',
-		#'TARGET_CHANNEL' : "1", # 0 uses combo of all channels. quotes req for cellpose
-		'TARGET_CHANNEL' : 1, # 0 uses combo of all channels # int reqd for label image det
-		#'TARGET_CHANNEL' : channel, 
-		#'CELLPOSE_MODEL' : "cpsam",
-		#'USE_GPU' : True,
-		'SIMPLIFY_CONTOURS' : True
+		'TARGET_CHANNEL' : channel,
+		'SIMPLIFY_CONTOURS' : False
 	}
 	
 	# Configure spot filters - Classical filter on quality
@@ -132,8 +127,7 @@ def run_trackmate(imp, channel):
 	IJ.run("Collect Garbage")
 	return tm, model
 
-## export xml TM
-
+## export xml Trackmate file
 def save_trackmate_xml(model, settings_obj, path):
     writer = TmXmlWriter(File(path), Logger.IJ_LOGGER)
     writer.appendModel(model)
@@ -141,21 +135,10 @@ def save_trackmate_xml(model, settings_obj, path):
     writer.writeToFile()
     print("TrackMate XML saved: " + path)
 
-
-## export label image
-
-def export_label_image(trackmate, imp_ref, path):
-    SelectionModel(trackmate.getModel())
-    label_imp = LabelImgExporter.createLabelImagePlus(
-        trackmate, False, False, LabelIdPainting.LABEL_IS_TRACK_ID)
-    label_imp.setCalibration(imp_ref.getCalibration())
-    IJ.saveAsTiff(label_imp, path)
-    label_imp.close()
-    IJ.run("Collect Garbage")
-    print("Label image saved: " + path)
     
 # ---- Run ----
 
+# Record start time
 start_time = time.time()
 IJ.log("\Clear")
 
@@ -255,7 +238,7 @@ total_elapsed_time = total_end_time - start_time
 print("Finished %d images in %s seconds." % (len(fnames) , total_elapsed_time))
 IJ.log("Finished all images in " + str(total_elapsed_time) + " seconds.")
 IJ.selectWindow("Log")
-IJ.saveAs("Text", os.path.join(outputDir,"TrackingLog.txt"))
+IJ.saveAs("Text", os.path.join(outputDir,"Tracking_Log.txt"))
 
 
 
