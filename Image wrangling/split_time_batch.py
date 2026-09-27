@@ -1,16 +1,19 @@
 #@ File(label = "Input folder:", style = "directory") inDir
 #@ File(label = "Output folder:", style = "directory") outDir
 #@ String(label="Image File Extension", required=false, value=".tif") image_extension
-#@ String(label="Image File Extension", required=false, value=".tif") image_extension
 #@ int(label = "# of timepoints:",style = "spinner") numTimepoints
 
-# stack_to_images.py
+# split_time_batch.py
 # Theresa Swayne, 2024
 # From a folder of multichannel time stacks, saves all slices as multichannel tiff
 # Useful for generating images for cellpose segmentation
 
-# TO USE: Run the macro and specify folders for input and output.
-# Limitations: Expects either Z or T series format.
+#  -------- Suggested text for acknowledgement by core facility users -----------
+#   "These studies used the Confocal and Specialized Microscopy Shared Resource 
+#   of the Herbert Irving Comprehensive Cancer Center at Columbia University, 
+#   funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
+
+# Limitations: Not tested on 4D stacks
 
 # ---- Setup ----
 
@@ -22,19 +25,28 @@ from ij import IJ, ImagePlus, ImageStack
 from ij.process import ImageProcessor, FloatProcessor, StackProcessor
 import string
 from ij import WindowManager
+from java.lang import System
 
-# Find image files
+# Record start time
+start_time = System.nanoTime()
+print "Started at",start_time
+
+# ---- Find image files ---- 
 inputdir = str(inDir) # convert the directory object into a string
 outputdir = str(outDir)
 fnames = [] # empty array for filenames
+
+# get full file list
 for fname in os.listdir(inputdir):
+	if fname.startswith("."): # avoid dotfiles that have the extension and filename filter
+		continue
 	if fname.endswith(image_extension):
 		fnames.append(os.path.join(inputdir, fname)) # add matching files to the array
-fnames = sorted(fnames) # sort the file names
 
 if len(fnames) < 1: # no files
 	raise Exception("No image files found in %s" % inputdir)
 
+fnames = sorted(fnames) # sort the file names
 print "Processing",len(fnames), "stacks"
 		
 for fname in fnames:
@@ -81,7 +93,6 @@ for fname in fnames:
 		impFrame.close() # the frame
 			
 	imp.close() # the stack
-
 
 print "Finished"
 

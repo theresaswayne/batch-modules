@@ -15,7 +15,6 @@
 // Input: folder of multichannel z stacks
 // Output: single-channel stacks, optionally resampled in the Z axis to a desired spacing
 
-
 // ---- Setup
 
 while (nImages>0) { // close all open images
@@ -59,21 +58,19 @@ function processFolder(inputDir, outputDir, fileSuffix, chan, reslice) {
 	// this function searches for files matching the criteria and sends them to the processFile function
 
 	filenum = 0;
-	print("Processing folder", input);
+	print("Processing folder", inputDir);
 	list = getFileList(inputDir);
-	for (i=0; i<list.length; i++) 
-		{
+	for (i=0; i<list.length; i++) {
 	    if(File.isDirectory(inputDir + File.separator + list[i])) {
-			processFolder("" + inputDir +File.separator+ list[i]); 
-			}
+			processFolder("" + inputDir +File.separator+ list[i], outputDir, fileSuffix); 
+		}
 	    else if (endsWith(list[i], fileSuffix)) {
 			filenum = filenum + 1;
 	       	processFile(inputDir, outputDir, list[i], filenum, fileSuffix, chan, reslice); 
-	       	} 
-		}
+	    } 
+	}
 	return filenum;
 } // end of processFolder function
-
 
 function processFile(inputFolder, outputFolder, fileName, fileNumber, fileSuffix, chan, reslice) {
 	// this function processes a single image
