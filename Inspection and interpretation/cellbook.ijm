@@ -2,10 +2,10 @@
 //@File(label = "Green channel input directory", style = "directory") inputGreenImg
 //@File(label = "Segmented red channel input directory", style = "directory") inputRedSeg
 //@File(label = "Segmented green channel input directory", style = "directory") inputGreenSeg
-//@String (label = "Red channel name contains:") redPattern
-//@String (label = "Green channel name contains:") greenPattern
+//@String (label = "Red channel name suffix:") redPattern
+//@String (label = "Green channel name suffix:") greenPattern
 //@File(label = "Output directory", style = "directory") outputDir
-//@String (label = "File suffix", value = ".tif") fileSuffix
+//@String (label = "File extension", value = ".tif") fileSuffix
 
 // cellbook.ijm
 // ImageJ/Fiji script to make gallery of 2-channel fluorescence and segmented images for inspection
@@ -22,7 +22,8 @@
 // Does not search folders recursively
 // 3D stacks are max projected before display
 // Output directory must be empty!
-// Assumes the two channel names are constructed with suffixes
+// Assumes the two channel names are constructed such that the names are identical except for the parts given in redPattern and greenPattern, which are right before the extension
+
 
 // ---- Setup ----
 
@@ -35,16 +36,19 @@ run("Collect Garbage"); // helps to clear memory
 print("\\Clear"); // clear Log window
 startTime = getTime(); // keep track of time
 setBatchMode(true); // faster performance 
+setForegroundColor(0, 0, 0);
+setBackgroundColor(255, 255, 255);
+run("Colors...", "foreground=black background=white selection=yellow");
 run("Bio-Formats Macro Extensions"); // support native microscope files
 
 // ---- Run ----
 
-print("Processing ",fileSuffix,"images in folder", inputDir);
+print("Processing ",fileSuffix,"images in folder", inputRedImg);
 
 // call the processFolder function, including the parameters collected at the beginning of the script
 // this function will assemble the channels and segmentations with a label for each image
 // returns the number of files processed 
-n = processFolder(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, outputDir, fileSuffix);
+n = processFolder(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, redPattern, greenPattern, outputDir, fileSuffix);
 
 // make a mega montage of all of the montages
 
@@ -61,7 +65,7 @@ print("There are",montCount, "montages, which we will display in",sheetCount,"co
 
 for (i = 0; i < sheetCount; i++) { // loop through contact sheets
 	
-	print("Processing sheet",i);
+	print("Processing sheet",i+1);
 	//showMessageWithCancel("Escape from infinite loop","Processing sheet "+i); // for debugging
 	// open a batch of images
 	for (j= 0; j < batchSize; j++) { // loop through images in the sheet
@@ -81,7 +85,7 @@ for (i = 0; i < sheetCount; i++) { // loop through contact sheets
 	//		break; // exit this outer loop
 	//	}
 	// stack the images and make a montage
-	sheetName = "cellbook" + i;
+	sheetName = "cellbook" + (i+1);
 	
 	// check for case where only 1 image is open
 	titleList = getList("image.titles");
@@ -148,7 +152,7 @@ function niceProjection(input) {
 	return(outputID)
 } // end of niceProjection function
 
-function processFolder(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, outputDir, fileSuffix) {
+function processFolder(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, redPattern, greenPattern, outputDir, fileSuffix) {
 	// this function searches for files in the first input folder that match the criteria and sends them to the processFile function
 
 	filenum = 0;
@@ -159,7 +163,7 @@ function processFolder(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, o
 	for (i = 0; i < list.length; i++) {
 		if(endsWith(list[i], fileSuffix)) { // we will process this image
 			filenum = filenum + 1;
-			processFile(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, outputDir, list[i], filenum); // passes the filename and parameters to the processFile function
+			processFile(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, redPattern, greenPattern, outputDir, list[i], filenum); // passes the filename and parameters to the processFile function
 		}
 	}
 	return filenum;
@@ -181,15 +185,16 @@ function processFile(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, red
 	extension = substring(fileName, dotIndex);
 	nameLength = lengthOf(basename);
 	patternLength = lengthOf(redPattern);
-	patternLocation = indexOf(basename, redPattern);
-	patternStart = nameLength-patternLocation;
-	patternEnd = patternStart + patternLength;
+	extLength = lengthOf(fileSuffix);
+	//patternLocation = indexOf(basename, redPattern);
+	//patternStart = nameLength-patternLocation;
+	//patternEnd = patternStart + patternLength;
 	
 	//print("Pattern starts at", patternStart,"and ends at",patternEnd);
 	
-	origName = substring(basename, 0, patternStart+2) + substring(basename, patternEnd+2, nameLength); // remove specific pattern
-	greenName = substring(basename, 0, patternStart+2) + greenPattern + substring(basename, patternEnd+2, nameLength);
-	//print(basename, origName, greenName);
+	origName = substring(basename, 0, nameLength-patternLength); // remove specific pattern
+	greenName = origName + greenPattern + fileSuffix;
+	print(basename, origName, greenName);
 
 	//origName = substring(basename, 0, nameLength-12); // remove "-cX-resliced"
 	patternLength = lengthOf(redPattern);
@@ -231,8 +236,8 @@ function processFile(inputRedImg, inputGreenImg, inputRedSeg, inputGreenSeg, red
 	}
 
 	// open the green segmented image
-	greendotIndex = lastIndexOf(greenfileName, ".");
-	greenbasename = substring(greenfileName, 0, greendotIndex); 
+	greendotIndex = lastIndexOf(greenName, ".");
+	greenbasename = substring(greenName, 0, greendotIndex); 
 
 	greenSegName = greenbasename + "_seg.tif";
 	greenSegPath = inputGreenSeg + File.separator+ greenSegName;
