@@ -32,7 +32,7 @@ from java.lang import System
 
 # Record start time
 start_time = System.nanoTime()
-print "Started at",start_time
+print "Starting"
 
 # Find image files
 inputdir = str(inDir) # convert the directory object into a string

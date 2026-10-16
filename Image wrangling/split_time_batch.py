@@ -5,7 +5,7 @@
 
 # split_time_batch.py
 # Theresa Swayne, 2024
-# From a folder of multichannel time stacks, saves all slices as multichannel tiff
+# From a folder of multichannel time stacks (2D or 3D), saves each timepoint as multichannel tiff
 # Useful for generating images for cellpose segmentation
 
 #  -------- Suggested text for acknowledgement by core facility users -----------
@@ -13,7 +13,7 @@
 #   of the Herbert Irving Comprehensive Cancer Center at Columbia University, 
 #   funded in part through the NIH/NCI Cancer Center Support Grant P30CA013696."
 
-# Limitations: Not tested on 4D stacks
+# Limitations: Original stack must fit in memory; must supply # timepoints at run time
 
 # ---- Setup ----
 
@@ -24,12 +24,12 @@ from net.imglib2.view import Views
 from ij import IJ, ImagePlus, ImageStack
 from ij.process import ImageProcessor, FloatProcessor, StackProcessor
 import string
-from ij import WindowManager
+from ij import WindowManager as wm
 from java.lang import System
 
 # Record start time
 start_time = System.nanoTime()
-print "Started at",start_time
+print "Starting"
 
 # ---- Find image files ---- 
 inputdir = str(inDir) # convert the directory object into a string
@@ -96,3 +96,12 @@ for fname in fnames:
 
 print "Finished"
 
+	
+#  Record end time
+end_time = System.nanoTime()
+
+#  Calculate duration
+elapsed_time = end_time - start_time
+elapsed_seconds = elapsed_time / 1000000000.0
+
+IJ.log("Finished in: " + str(elapsed_seconds) + " seconds")
