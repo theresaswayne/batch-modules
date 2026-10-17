@@ -83,7 +83,7 @@ function processFile(inputFolder, outputFolder, fileName, fileNumber) {
     }
     else{
 		dotIndex = lastIndexOf(fileName, ".");
-	    basename = File.getNameWithoutExtension(basename);
+	    basename = File.getNameWithoutExtension(fileName);
 		extension = substring(fileName, dotIndex);
     }
 
